@@ -14,6 +14,53 @@ begin
 	const theta3_initial_rad = 0.0
 end
 
+"""
+Constraint equations can be found by using 3 planar coordinates per rigid body:
+
+q = [x_1 y_1 θ_1;
+	x_2 y_2 θ_2;
+	x_3 y_3 θ_3]
+
+, where x1 y1 and θ_1 relate to piston 1, x2 y2 and θ2 relate to piston 2,
+and x3 y3 and θ3 relate to the rigid bar center and orientation.
+
+The bar's endpoints can be located at the bar's frame at:
+
+a = [L/2; 0]	,	b = [-L/2; 0]
+
+, where L is the length of the piston.
+The planar rotation matrix can be described as:
+
+A(θ) = [cos(θ) -sin(θ);
+		sin(θ) cos(θ)]
+
+Meaning the endpoint positions would then be:
+
+r_A = r_3 + A(θ_3)a		,		r_B = r_3 + A(θ_3)b
+
+, where r_3 = [x_3; y_3].
+"""
+"""
+This leads into the constraint equations, which we should have 9 of to match the 9 DOFs.
+First, we have 4 total (2 per piston) constraints due to the slider/track that the pistons ride on.
+Since the tracks are perpendicular and at constant 45 degree intersections with the origin:
+C_1 (Constraint 1) : y_1 - x_1 = 0
+C_2 : θ_1 - π/4 = 0
+C_3 : y_2 + x_2 = 0
+C_4 : θ_2 + π/4 = 0
+
+Next, we have the 4 total (2 per joint) constraints between the pistons and the bar ends:
+C_5 : x_1 - (x_3 + (L/2)cos(θ_3)) = 0
+C_6 : y_1 - (y_3 + (L/2)sin(θ_3)) = 0
+C_7 : x_2 - (x_3 - (L/2)cos(θ_3)) = 0
+C_8 : y_2 - (y_3 - (L/2)sin(θ_3)) = 0
+
+Lastly, we have the 1 driving constraint regarding the constant angular speed of the bar:
+C_9 : θ_3 - (θ_3,0 + ωt) = 0
+
+We can collect these constraint equations into a single function:
+C(q,t) = 0 ∈ R^9
+"""
 # ╔═╡ 7297bc9c-a8dc-449e-83f8-3e51cd81a2ec
 function constraints_vector(q, time_s)
 	position_x1, position_y1, angle1 = q[1], q[2], q[3]
