@@ -61,6 +61,17 @@ C_9 : θ_3 - (θ_3,0 + ωt) = 0
 We can collect these constraint equations into a single function:
 C(q,t) = 0 ∈ R^9
 """
+"""
+To find the velocity, we differentiate C(q,t) by q and t:
+
+velocity : C_q(q,t)q' + C_t(q,t) = 0
+
+And differentiate again for the acceleration:
+
+acceleration : C_q*q" + C_qq(q', q') + 2C_qt*q' + C_tt = 0
+--> C_qt = 0 and C_tt = 0 since w is constant:
+C_q*q" = -C_qq(q',q')
+"""
 # ╔═╡ 7297bc9c-a8dc-449e-83f8-3e51cd81a2ec
 function constraints_vector(q, time_s)
 	position_x1, position_y1, angle1 = q[1], q[2], q[3]
