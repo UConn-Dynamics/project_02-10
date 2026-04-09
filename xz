@@ -1,0 +1,190 @@
+### A Pluto.jl notebook ###
+# v0.20.4
+
+using Markdown
+using InteractiveUtils
+
+# ╔═╡ 1f69a6a2-47b2-4d35-9a13-706c930f3c6e
+md"""
+# Project 02 - Multibody Kinematic Modeling
+
+Question 1 only: constraint equations `C(q, t)`.
+
+Modeling assumptions used here:
+1. The global frame origin is placed at the intersection of the two tracks.
+2. Piston 1 slides on the `+45 deg` track: `y = x + track1_offset`.
+3. Piston 2 slides on the `-45 deg` track: `y = -x + track2_offset`.
+4. The bar endpoints are pinned to the centers of the two pistons.
+5. `theta3` is prescribed by `theta3(t) = theta3_0 + omega3 * t`.
+
+Generalized coordinates:
+`q = [x1, y1, theta1, x2, y2, theta2, x3, y3, theta3]`
+"""
+
+# ╔═╡ 5f0b8e88-8b1b-4888-9ff0-b38a7d51b3fb
+begin
+    struct MechanismParams
+        L::Float64
+        omega3::Float64
+        theta1_track::Float64
+        theta2_track::Float64
+        theta3_0::Float64
+        track1_offset::Float64
+        track2_offset::Float64
+    end
+
+    function MechanismParams(;
+        L::Real = 0.10,
+        omega3::Real = 2.0,
+        theta1_track::Real = pi / 4,
+        theta2_track::Real = -pi / 4,
+        theta3_0::Real = pi / 2,
+        track1_offset::Real = 0.0,
+        track2_offset::Real = 0.0,
+    )
+        return MechanismParams(
+            Float64(L),
+            Float64(omega3),
+            Float64(theta1_track),
+            Float64(theta2_track),
+            Float64(theta3_0),
+            Float64(track1_offset),
+            Float64(track2_offset),
+        )
+    end
+
+    const DEFAULT_PARAMS = MechanismParams()
+end
+
+# ╔═╡ 7a4056d6-6252-4934-a982-db6ace9b7980
+constraint_labels() = [
+    "C1: piston 1 center on +45 deg track",
+    "C2: piston 1 orientation fixed to +45 deg track",
+    "C3: piston 2 center on -45 deg track",
+    "C4: piston 2 orientation fixed to -45 deg track",
+    "C5: lower bar end x-position matches piston 1 center",
+    "C6: lower bar end y-position matches piston 1 center",
+    "C7: upper bar end x-position matches piston 2 center",
+    "C8: upper bar end y-position matches piston 2 center",
+    "C9: prescribed rotation of the rigid bar",
+]
+
+# ╔═╡ 73b92be1-4547-4eec-b43c-92fe14f08dcc
+begin
+    """
+        constraint_vector(q, t; p = DEFAULT_PARAMS)
+
+    Return the 9 constraint equations `C(q, t)` for the mechanism.
+    """
+    function constraint_vector(q::AbstractVector, t::Real; p::MechanismParams = DEFAULT_PARAMS)
+        length(q) == 9 || throw(ArgumentError("q must have 9 entries: [x1, y1, theta1, x2, y2, theta2, x3, y3, theta3]"))
+
+        x1, y1, theta1, x2, y2, theta2, x3, y3, theta3 = q
+        a = p.L / 2.0
+        c3 = cos(theta3)
+        s3 = sin(theta3)
+
+        C = Vector{Float64}(undef, 9)
+
+        C[1] = (y1 - x1) - p.track1_offset
+        C[2] = theta1 - p.theta1_track
+        C[3] = (y2 + x2) - p.track2_offset
+        C[4] = theta2 - p.theta2_track
+
+        C[5] = x1 - (x3 - a * c3)
+        C[6] = y1 - (y3 - a * s3)
+        C[7] = x2 - (x3 + a * c3)
+        C[8] = y2 - (y3 + a * s3)
+
+        C[9] = theta3 - (p.theta3_0 + p.omega3 * t)
+
+        return C
+    end
+end
+
+# ╔═╡ 6da10f9b-6661-4bbc-b29f-4549ad8e6312
+begin
+    """
+        equations_text(; p = DEFAULT_PARAMS)
+
+    Return a text summary of the analytical constraint equations.
+    """
+    function equations_text(; p::MechanismParams = DEFAULT_PARAMS)
+        lines = [
+            "Constraint equations C(q, t) = 0",
+            "q = [x1, y1, theta1, x2, y2, theta2, x3, y3, theta3]",
+            "",
+            "C1 = (y1 - x1) - $(p.track1_offset)",
+            "C2 = theta1 - $(p.theta1_track)",
+            "C3 = (y2 + x2) - $(p.track2_offset)",
+            "C4 = theta2 - $(p.theta2_track)",
+            "C5 = x1 - (x3 - (L/2) * cos(theta3))",
+            "C6 = y1 - (y3 - (L/2) * sin(theta3))",
+            "C7 = x2 - (x3 + (L/2) * cos(theta3))",
+            "C8 = y2 - (y3 + (L/2) * sin(theta3))",
+            "C9 = theta3 - (theta3_0 + omega3 * t)",
+        ]
+
+        return join(lines, "`n")
+    end
+end
+
+# ╔═╡ a314b487-a029-47ae-8e5f-6c4d52f84b39
+begin
+    """
+        consistent_configuration(t; p = DEFAULT_PARAMS)
+
+    Construct one configuration `q(t)` that satisfies the constraints under the
+    default origin choice where both track offsets are zero.
+    """
+    function consistent_configuration(t::Real; p::MechanismParams = DEFAULT_PARAMS)
+        abs(p.track1_offset) < 1e-12 || throw(ArgumentError("consistent_configuration assumes track1_offset = 0.0"))
+        abs(p.track2_offset) < 1e-12 || throw(ArgumentError("consistent_configuration assumes track2_offset = 0.0"))
+
+        a = p.L / 2.0
+        theta3 = p.theta3_0 + p.omega3 * t
+
+        x3 = -a * sin(theta3)
+        y3 = -a * cos(theta3)
+
+        x1 = x3 - a * cos(theta3)
+        y1 = y3 - a * sin(theta3)
+        x2 = x3 + a * cos(theta3)
+        y2 = y3 + a * sin(theta3)
+
+        return [
+            x1, y1, p.theta1_track,
+            x2, y2, p.theta2_track,
+            x3, y3, theta3,
+        ]
+    end
+end
+
+# ╔═╡ 2ee6e17b-29dc-4da4-bf95-e86307b68b0f
+equations_text()
+
+# ╔═╡ 70a6444d-a5b7-4a30-9436-3f17470945bd
+begin
+    p = DEFAULT_PARAMS
+    t = 0.0
+    q = consistent_configuration(t; p = p)
+    C = constraint_vector(q, t; p = p)
+
+    (
+        t = t,
+        q = q,
+        C = C,
+        max_abs_C = maximum(abs.(C)),
+        labels = constraint_labels(),
+    )
+end
+
+# ╔═╡ Cell order:
+# ╟─1f69a6a2-47b2-4d35-9a13-706c930f3c6e
+# ╠═5f0b8e88-8b1b-4888-9ff0-b38a7d51b3fb
+# ╠═7a4056d6-6252-4934-a982-db6ace9b7980
+# ╠═73b92be1-4547-4eec-b43c-92fe14f08dcc
+# ╠═6da10f9b-6661-4bbc-b29f-4549ad8e6312
+# ╠═a314b487-a029-47ae-8e5f-6c4d52f84b39
+# ╠═2ee6e17b-29dc-4da4-bf95-e86307b68b0f
+# ╠═70a6444d-a5b7-4a30-9436-3f17470945bd
